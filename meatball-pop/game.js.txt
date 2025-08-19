@@ -1,0 +1,182 @@
+// game.js
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 700;
+canvas.height = 400;
+
+let level = 1;
+let score = 0;
+let time = 20;
+let gameInterval;
+let timerInterval;
+let isPaused = false;
+
+const meatballImg = new Image();
+meatballImg.src = "assets/meatball.png";
+
+class Meatball {
+    constructor(x, y, size, speed) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.speed = speed;
+    }
+
+    draw() {
+        ctx.drawImage(meatballImg, this.x, this.y, this.size, this.size);
+    }
+
+    update() {
+        this.y += this.speed;
+        if (this.y > canvas.height) {
+            this.y = -this.size;
+            this.x = Math.random() * (canvas.width - this.size);
+        }
+        this.draw();
+    }
+
+    isClicked(mouseX, mouseY) {
+        return (
+            mouseX > this.x &&
+            mouseX < this.x + this.size &&
+            mouseY > this.y &&
+            mouseY < this.y + this.size
+        );
+    }
+}
+
+let meatballs = [];
+let cheesePops = [];
+
+// Cheese Pop Effect
+class CheesePop {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.particles = [];
+
+        for (let i = 0; i < 10; i++) {
+            this.particles.push({
+                x: this.x,
+                y: this.y,
+                dx: (Math.random() - 0.5) * 4,
+                dy: (Math.random() - 0.5) * 4,
+                size: Math.random() * 6 + 2,
+                life: 30
+            });
+        }
+    }
+
+    draw() {
+        this.particles.forEach(p => {
+            ctx.fillStyle = "white"; // mozzarella cheese color
+            ctx.beginPath();
+            ctx.ellipse(p.x, p.y, p.size / 2, p.size / 4, Math.random() * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    update() {
+        this.particles.forEach(p => {
+            p.x += p.dx;
+            p.y += p.dy;
+            p.life--;
+        });
+        this.particles = this.particles.filter(p => p.life > 0);
+        this.draw();
+    }
+}
+
+function startGame() {
+    score = 0;
+    time = 20;
+    level = 1;
+    meatballs = [];
+    cheesePops = [];
+    spawnMeatballs(3);
+
+    clearInterval(gameInterval);
+    clearInterval(timerInterval);
+
+    gameInterval = setInterval(updateGame, 1000 / 60);
+    timerInterval = setInterval(updateTimer, 1000);
+}
+
+function spawnMeatballs(num) {
+    for (let i = 0; i < num; i++) {
+        let size = 50;
+        let x = Math.random() * (canvas.width - size);
+        let y = Math.random() * (canvas.height - size);
+        let speed = 1 + level * 0.5;
+        meatballs.push(new Meatball(x, y, size, speed));
+    }
+}
+
+function updateGame() {
+    if (isPaused) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    meatballs.forEach((meatball) => {
+        meatball.update();
+    });
+
+    cheesePops.forEach((pop, index) => {
+        pop.update();
+        if (pop.particles.length === 0) cheesePops.splice(index, 1);
+    });
+
+    document.getElementById("targets").innerText = score;
+}
+
+function updateTimer() {
+    if (isPaused) return;
+
+    time--;
+    document.getElementById("time").innerText = time;
+
+    if (time <= 0) {
+        clearInterval(timerInterval);
+        clearInterval(gameInterval);
+        alert("Time’s up! Final Score: " + score);
+    }
+}
+
+canvas.addEventListener("click", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    meatballs.forEach((meatball, index) => {
+        if (meatball.isClicked(mouseX, mouseY)) {
+            meatballs.splice(index, 1);
+            score++;
+
+            // Cheese burst effect
+            cheesePops.push(new CheesePop(mouseX, mouseY));
+
+            spawnMeatballs(1);
+
+            if (score % 10 === 0) {
+                level++;
+                document.getElementById("level").innerText = level;
+
+                if (level > 10) {
+                    clearInterval(timerInterval);
+                    clearInterval(gameInterval);
+                    alert("🎉 Congratulations! You win!\nUse Promo Code: BallGameWinner");
+                } else {
+                    spawnMeatballs(2);
+                }
+            }
+        }
+    });
+});
+
+document.getElementById("startBtn").addEventListener("click", startGame);
+
+document.getElementById("pauseBtn").addEventListener("click", () => {
+    isPaused = !isPaused;
+    document.getElementById("pauseBtn").innerText = isPaused ? "Resume" : "Pause";
+});

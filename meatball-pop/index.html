@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Meatball Pop</title>
+<style>
+html,body{height:100%;margin:0}
+body{background:#0d1117;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;display:flex;justify-content:center;align-items:center;min-height:100vh;overflow:auto}
+#game-container{width:100%;max-width:980px;padding:12px 16px;display:flex;flex-direction:column;align-items:center}
+h1{margin:6px 0 10px;font-weight:800;letter-spacing:.5px}
+#hud{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+.hud-item{background:#161b22;border:1px solid #263041;border-radius:10px;padding:8px 16px;font-weight:800;letter-spacing:.5px}
+#gameCanvas{display:block;background:#0f141b;border:2px solid #2a3342;border-radius:12px;max-width:100%;max-height:70vh}
+#controls{margin:12px 0 0;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+button{appearance:none;background:#222b37;color:#fff;border:1px solid #2f3c4f;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:700}
+button:hover{filter:brightness(1.08)}
+/* Tiny debug badge */
+#imgBadge{position:fixed;right:10px;top:10px;padding:4px 8px;border-radius:6px;background:#1f2937;border:1px solid #334155;font-size:12px;opacity:.85}
+</style>
+</head>
+<body>
+  <div id="game-container">
+    <h1>Meatball Pop</h1>
+    <div id="hud">
+      <div class="hud-item">LEVEL <span id="level">1</span></div>
+      <div class="hud-item">TARGETS <span id="targets">0</span></div>
+      <div class="hud-item">TIME <span id="time">20</span></div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+      <button id="startBtn">Start</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="soundBtn">Sound: On</button>
+    </div>
+  </div>
+  <div id="imgBadge">IMG: …</div>
+
+<script>
+// ===== single-file game (with image debug) =====
+const canvas=document.getElementById('gameCanvas');const ctx=canvas.getContext('2d');
+function sizeCanvas(){const c=document.getElementById('game-container');const maxW=Math.min(980,c.clientWidth-24);const hFromW=Math.floor(maxW*9/16);const maxH=Math.floor(window.innerHeight*.65);const h=Math.max(300,Math.min(hFromW,maxH));const w=Math.floor(h*16/9);canvas.width=w;canvas.height=h;canvas.style.width=w+'px';canvas.style.height=h+'px'};document.readyState==='loading'?document.addEventListener('DOMContentLoaded',sizeCanvas):sizeCanvas();window.addEventListener('resize',sizeCanvas,{passive:true});
+const levelEl=document.getElementById('level'),targetsEl=document.getElementById('targets'),timeEl=document.getElementById('time');const startBtn=document.getElementById('startBtn'),pauseBtn=document.getElementById('pauseBtn'),soundBtn=document.getElementById('soundBtn');const badge=document.getElementById('imgBadge');
+
+const meatballImg=new Image(); let imgReady=false;
+const MEATBALL_SRC='assets/meatball.png?cb='+Date.now(); // cache-buster
+meatballImg.onload=()=>{imgReady=true;badge.textContent='IMG: OK';};
+meatballImg.onerror=(e)=>{badge.textContent='IMG: FAIL'; console.warn('Failed to load',MEATBALL_SRC,e);};
+meatballImg.src=MEATBALL_SRC;
+
+let balls=[],popFlashes=[]; let level=1,timeLeft=20,targetsRemaining=0; let isPaused=false,running=false,gameRAF=0,timerId=0,soundOn=true;
+const popSound=new Audio('https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg');
+const rand=(a,b)=>Math.random()*(b-a)+a;
+function levelConfig(n){return{time:20,count:6+(n-1)*2,size:{min:36,max:Math.max(36,56-(n-1)*2)},speed:60+(n-1)*8}}
+function spawnBall(cfg){const r=rand(cfg.size.min,cfg.size.max),x=rand(r,canvas.width-r),y=rand(canvas.height*.25,canvas.height-r),vx=rand(-20,20),vy=cfg.speed+rand(-10,20);balls.push({x,y,r,vx,vy,rot:rand(0,Math.PI*2),spin:rand(-.8,.8)})}
+function updateHUD(){levelEl.textContent=level;targetsEl.textContent=targetsRemaining;timeEl.textContent=timeLeft}
+function startLevel(n=1){level=n;const cfg=levelConfig(level);timeLeft=cfg.time;balls.length=0;popFlashes.length=0;for(let i=0;i<cfg.count;i++)spawnBall(cfg);targetsRemaining=balls.length;updateHUD();if(gameRAF)cancelAnimationFrame(gameRAF);if(timerId)clearInterval(timerId);running=true;isPaused=false;timerId=setInterval(()=>{if(!running||isPaused)return;timeLeft=Math.max(0,timeLeft-1);updateHUD();if(timeLeft===0)endLevel(false)},1e3);gameRAF=requestAnimationFrame(loop)}
+function endLevel(won){running=false;if(gameRAF)cancelAnimationFrame(gameRAF);if(timerId)clearInterval(timerId);if(won){if(level>=10){alert('Congratulations! You win!\\nPromo Code: BallGameWinner');startLevel(1)}else{alert('Level '+level+' complete! Starting Level '+(level+1));startLevel(level+1)}}else{alert('Level '+level+' — Try again');startLevel(level)}}
+canvas.addEventListener('click',e=>{if(!running||isPaused)return;const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*(canvas.width/r.width),y=(e.clientY-r.top)*(canvas.height/r.height);for(let i=balls.length-1;i>=0;i--){const b=balls[i];if(Math.hypot(b.x-x,b.y-y)<=b.r){balls.splice(i,1);targetsRemaining=Math.max(0,targetsRemaining-1);popFlashes.push({x,y,age:0,life:220});try{popSound.currentTime=0;if(soundOn)popSound.play()}catch{}updateHUD();if(targetsRemaining===0)return endLevel(true);break}}});
+startBtn.addEventListener('click',()=>startLevel(1)); pauseBtn.addEventListener('click',()=>{if(!running)return;isPaused=!isPaused;pauseBtn.textContent=isPaused?'Resume':'Pause';if(!isPaused)gameRAF=requestAnimationFrame(loop)}); soundBtn.addEventListener('click',()=>{soundOn=!soundOn;soundBtn.textContent=soundOn?'Sound: On':'Sound: Off'});
+
+let lastTs=0;
+function loop(ts){if(!running||isPaused)return;if(!lastTs)lastTs=ts;const dt=Math.min(1/30,(ts-lastTs)/1e3);lastTs=ts;for(const b of balls){b.x+=b.vx*dt;b.y-=b.vy*dt;b.rot+=b.spin*dt;if(b.x<b.r){b.x=b.r;b.vx*=-1}if(b.x>canvas.width-b.r){b.x=canvas.width-b.r;b.vx*=-1}}for(let i=balls.length-1;i>=0;i--)if(balls[i].y+balls[i].r<-10)balls.splice(i,1);if(balls.length===0&&targetsRemaining>0)return endLevel(false);
+ctx.clearRect(0,0,canvas.width,canvas.height);const g=ctx.createLinearGradient(0,canvas.height,0,0);g.addColorStop(0,'#0f172a');g.addColorStop(1,'#1e293b');ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,canvas.height);
+for(const b of balls){ctx.save();ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.clip();if(imgReady){const d=b.r*2;ctx.translate(b.x,b.y);ctx.rotate(b.rot);ctx.translate(-b.x,-b.y);const ratio=Math.max(d/meatballImg.width,d/meatballImg.height);const iw=meatballImg.width*ratio,ih=meatballImg.height*ratio;ctx.drawImage(meatballImg,b.x-iw/2,b.y-ih/2,iw,ih);}else{ctx.fillStyle='#9d4b00';ctx.fillRect(b.x-b.r,b.y-b.r,b.r*2,b.r*2);}ctx.restore();ctx.strokeStyle='rgba(255,255,255,0.6)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.stroke();}
+for(let i=popFlashes.length-1;i>=0;i--){const p=popFlashes[i];p.age+=dt*1e3;const t=Math.min(1,p.age/p.life),alpha=1-t,r=10+40*t;const grd=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);grd.addColorStop(0,`rgba(255,250,230,${0.9*alpha})`);grd.addColorStop(1,`rgba(255,220,120,0)`);ctx.fillStyle=grd;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();if(p.age>=p.life)popFlashes.splice(i,1)}
+gameRAF=requestAnimationFrame(loop);}
+</script>
+</body>
+</html>
